@@ -10,7 +10,7 @@
 export const BACKEND_URL =
   import.meta.env.VITE_BACKEND_URL ||
   import.meta.env.VITE_API_BASE_URL ||
-  'http://localhost:5000'; // <-- Place your default backend URL here
+  'http://localhost:8080';
 
 // Alias exports for convenience across the codebase
 export const API_BASE_URL = BACKEND_URL;
@@ -21,14 +21,28 @@ export const BASE_URL = BACKEND_URL;
  * Centralize all backend route definitions here for easy maintenance.
  */
 export const ENDPOINTS = {
-  HEALTH: `${BACKEND_URL}/api/health`,
+  HEALTH: `${BACKEND_URL}/api/gemini/health`,
+  GEMINI: {
+    GENERATE: `${BACKEND_URL}/api/gemini/generate-app-json`,
+    GENERATE_MULTIPART: `${BACKEND_URL}/api/gemini/generate-app`,
+    MODELS: `${BACKEND_URL}/api/gemini/models`,
+    HEALTH: `${BACKEND_URL}/api/gemini/health`,
+  },
+  APPS: {
+    BASE: `${BACKEND_URL}/api/apps`,
+  },
+  SETTINGS: {
+    BASE: `${BACKEND_URL}/api/settings`,
+    TEST_KEY: `${BACKEND_URL}/api/settings/test-key`,
+  },
   AUTH: {
     LOGIN: `${BACKEND_URL}/api/auth/login`,
-    REGISTER: `${BACKEND_URL}/api/auth/register`,
+    GOOGLE: `${BACKEND_URL}/api/auth/google`,
+    SEND_OTP: `${BACKEND_URL}/api/auth/send-otp`,
+    VERIFY_OTP: `${BACKEND_URL}/api/auth/verify-otp`,
     LOGOUT: `${BACKEND_URL}/api/auth/logout`,
     ME: `${BACKEND_URL}/api/auth/me`,
   },
-  // Add other resource endpoints here as your project grows
 };
 
 /**

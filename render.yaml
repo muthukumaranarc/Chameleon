@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: chameleon-backend
+    runtime: docker
+    rootDir: Backend/Chameleon
+    dockerfilePath: Dockerfile
+    plan: free
+    region: oregon
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_DEFAULT_MODEL
+        value: gemini-3.1-flash-lite

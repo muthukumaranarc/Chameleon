@@ -8,29 +8,70 @@ import java.util.List;
 @Configuration
 public class GeminiConfig {
 
-    public static final String DEFAULT_MODEL = "gemini-3.6-flash";
+    public static final String DEFAULT_MODEL = "gemini-3.1-flash-lite";
 
     public static final List<String> SUPPORTED_MODELS = List.of(
+            "gemini-3.1-flash-lite",
+            "gemini-3.5-flash",
+            "gemini-3.7-flash",
             "gemini-3.6-flash",
             "gemini-3.8-flash",
-            "gemini-3.8-pro",
-            "gemini-3.0-flash",
-            "gemini-3.0-pro"
+            "gemini-flash-latest"
     );
 
     @Value("${gemini.api.key:${GEMINI_API_KEY:}}")
     private String apiKey;
 
+    private volatile String customApiKey;
+
     @Value("${gemini.default-model:" + DEFAULT_MODEL + "}")
     private String defaultModel;
 
+    public void setCustomApiKey(String key) {
+        if (key != null && !key.trim().isEmpty()) {
+            this.customApiKey = key.trim();
+        }
+    }
+
     public String getApiKey() {
+        if (customApiKey != null && !customApiKey.trim().isEmpty()) {
+            return customApiKey.trim();
+        }
         if (apiKey != null && !apiKey.trim().isEmpty()) {
             return apiKey.trim();
         }
         String envKey = System.getenv("GEMINI_API_KEY");
         if (envKey != null && !envKey.trim().isEmpty()) {
             return envKey.trim();
+        }
+        String dotEnvKey = readFromDotEnv();
+        if (dotEnvKey != null && !dotEnvKey.trim().isEmpty()) {
+            return dotEnvKey.trim();
+        }
+        return "";
+    }
+
+    private String readFromDotEnv() {
+        String[] potentialPaths = new String[]{
+                ".env",
+                "../.env",
+                "../../.env",
+                System.getProperty("user.dir") + "/.env",
+                System.getProperty("user.home") + "/.env"
+        };
+        for (String pathStr : potentialPaths) {
+            try {
+                java.io.File file = new java.io.File(pathStr);
+                if (file.exists() && file.isFile()) {
+                    for (String line : java.nio.file.Files.readAllLines(file.toPath())) {
+                        line = line.trim();
+                        if (line.startsWith("GEMINI_API_KEY=")) {
+                            return line.substring("GEMINI_API_KEY=".length()).trim().replaceAll("^\"|\"$|^'|'$", "");
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+            }
         }
         return null;
     }

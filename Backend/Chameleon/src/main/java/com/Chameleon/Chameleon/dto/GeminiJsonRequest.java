@@ -5,6 +5,8 @@ public class GeminiJsonRequest {
     private String imageBase64;
     private String mimeType;
     private String model;
+    private String apiKey;
+    private String customInstructions;
 
     public GeminiJsonRequest() {
     }
@@ -46,5 +48,21 @@ public class GeminiJsonRequest {
 
     public void setModel(String model) {
         this.model = model;
+    }
+
+    public String getApiKey() {
+        return apiKey;
+    }
+
+    public void setApiKey(String apiKey) {
+        this.apiKey = apiKey;
+    }
+
+    public String getCustomInstructions() {
+        return customInstructions;
+    }
+
+    public void setCustomInstructions(String customInstructions) {
+        this.customInstructions = customInstructions;
     }
 }

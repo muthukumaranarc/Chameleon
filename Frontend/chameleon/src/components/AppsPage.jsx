@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StudyPlannerVisual,
   ExpenseTrackerVisual,
@@ -7,55 +7,20 @@ import {
   NoteKeeperVisual,
   ImageGeneratorVisual,
 } from './CardVisuals';
-import { SearchIcon, PlusIcon } from './Icons';
+import { SearchIcon, PlusIcon, SparkleIcon } from './Icons';
 import UserProfileMenu from './UserProfileMenu';
 import NotificationPopover from './NotificationPopover';
 import chameleonMascot from '../assets/chameleon-mascot.png';
+import { api, ENDPOINTS } from '../api';
 
-const APPS_DATA = [
-  {
-    id: 'study-planner',
-    title: 'Study Planner',
-    description: 'Create personalized study plans, track your progress, and achieve your goals.',
-    buttonClass: 'btn-open-blue',
-    VisualComponent: StudyPlannerVisual,
-  },
-  {
-    id: 'expense-tracker',
-    title: 'Expense Tracker',
-    description: 'Monitor your income and expenses with beautiful insights.',
-    buttonClass: 'btn-open-green',
-    VisualComponent: ExpenseTrackerVisual,
-  },
-  {
-    id: 'chat-ai',
-    title: 'Chat with AI',
-    description: 'Get instant answers, brainstorm ideas, and solve problems.',
-    buttonClass: 'btn-open-purple',
-    VisualComponent: ChatAiVisual,
-  },
-  {
-    id: 'habit-tracker',
-    title: 'Habit Tracker',
-    description: 'Build and track good habits with AI support.',
-    buttonClass: 'btn-open-red',
-    VisualComponent: HabitTrackerVisual,
-  },
-  {
-    id: 'note-keeper',
-    title: 'Note Keeper',
-    description: 'Write, organize, and access your notes anywhere.',
-    buttonClass: 'btn-open-orange',
-    VisualComponent: NoteKeeperVisual,
-  },
-  {
-    id: 'image-generator',
-    title: 'Image Generator',
-    description: 'Create stunning images from your ideas using AI.',
-    buttonClass: 'btn-open-sky',
-    VisualComponent: ImageGeneratorVisual,
-  },
-];
+const STARTER_VISUAL_MAP = {
+  'study-planner': { comp: StudyPlannerVisual, btnClass: 'btn-open-blue' },
+  'expense-tracker': { comp: ExpenseTrackerVisual, btnClass: 'btn-open-green' },
+  'chat-ai': { comp: ChatAiVisual, btnClass: 'btn-open-purple' },
+  'habit-tracker': { comp: HabitTrackerVisual, btnClass: 'btn-open-red' },
+  'note-keeper': { comp: NoteKeeperVisual, btnClass: 'btn-open-orange' },
+  'image-generator': { comp: ImageGeneratorVisual, btnClass: 'btn-open-sky' },
+};
 
 export const AppsPage = ({
   onCreateNewApp,
@@ -65,12 +30,41 @@ export const AppsPage = ({
   user,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [hasNotification, setHasNotification] = useState(true);
+  const [appsList, setAppsList] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchApps = async () => {
+    try {
+      setLoading(true);
+      const data = await api.get(ENDPOINTS.APPS.BASE);
+      if (Array.isArray(data)) {
+        setAppsList(data);
+      }
+    } catch (err) {
+      console.warn('[Chameleon Apps] Fetch fallback:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchApps();
+  }, []);
+
+  const handleDeleteApp = async (e, id) => {
+    e.stopPropagation();
+    try {
+      await api.delete(`${ENDPOINTS.APPS.BASE}/${id}`);
+      setAppsList((prev) => prev.filter((a) => a.id !== id));
+    } catch (err) {
+      console.error('Failed to delete app', err);
+    }
+  };
 
   // Filter apps by search query
-  const filteredApps = APPS_DATA.filter((app) =>
-    app.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    app.description.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredApps = appsList.filter((app) =>
+    (app.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (app.description || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -105,12 +99,12 @@ export const AppsPage = ({
         {/* Hero Header Section */}
         <section className="apps-hero-banner">
           <div className="apps-hero-left">
-            <div className="apps-category-tag">MY APPS</div>
+            <div className="apps-category-tag">WORKSPACE APPS</div>
             <h1 className="apps-main-title">
               Your Ideas, Live as <span className="highlight-apps">Apps.</span>
             </h1>
             <p className="apps-main-desc">
-              All the applications you've created with Chameleon, in one place.
+              All applications generated with Gemini 3 and Chameleon, ready to launch and inspect.
             </p>
           </div>
 
@@ -144,34 +138,92 @@ export const AppsPage = ({
           </div>
         </section>
 
-        {/* 6 Apps Cards Grid */}
-        <section className="apps-cards-grid" aria-label="Created Applications">
-          {filteredApps.map((app) => {
-            const { id, title, description, buttonClass, VisualComponent } = app;
-            return (
-              <div key={id} className="app-main-card">
-                {/* Visual Banner Preview on top */}
-                <VisualComponent />
+        {/* Apps Cards Grid or Empty State */}
+        {loading ? (
+          <div className="apps-empty-container">
+            <div className="apps-loading-spinner" />
+            <p className="apps-empty-subtitle">Loading your applications...</p>
+          </div>
+        ) : filteredApps.length === 0 ? (
+          <div className="apps-empty-container">
+            <div className="apps-empty-icon-circle">
+              <SparkleIcon size={32} color="#8b5cf6" />
+            </div>
+            <h3 className="apps-empty-title">
+              {searchQuery ? 'No matching applications' : 'No Applications Created Yet'}
+            </h3>
+            <p className="apps-empty-subtitle">
+              {searchQuery
+                ? `We couldn't find any app matching "${searchQuery}". Try a different keyword.`
+                : 'Your created applications will appear here. Generate your first interactive web application in seconds with Chameleon AI!'}
+            </p>
+            <button
+              type="button"
+              className="btn-create-app apps-empty-action-btn"
+              onClick={onCreateNewApp}
+            >
+              <PlusIcon size={18} color="#ffffff" />
+              <span>Create New App</span>
+            </button>
+          </div>
+        ) : (
+          <section className="apps-cards-grid" aria-label="Created Applications">
+            {filteredApps.map((app) => {
+              const { id, title, description, color } = app;
+              const visualInfo = STARTER_VISUAL_MAP[id];
+              const VisualComponent = visualInfo?.comp;
+              const buttonClass = visualInfo?.btnClass || 'btn-open-purple';
 
-                {/* Content & Metadata */}
-                <div className="app-card-details">
-                  <h3 className="app-title-text">{title}</h3>
-                  <p className="app-description-text">{description}</p>
-                  <div className="app-action-row">
-                    <button
-                      type="button"
-                      className={`btn-open-app ${buttonClass}`}
-                      onClick={() => onOpenApp && onOpenApp(app)}
+              return (
+                <div key={id} className="app-main-card">
+                  {/* Visual Banner Preview on top */}
+                  {VisualComponent ? (
+                    <VisualComponent />
+                  ) : (
+                    <div
+                      className="custom-app-banner-card"
+                      style={{
+                        background: `linear-gradient(135deg, ${color || '#2563eb'}25, rgba(15,23,42,0.8))`,
+                        borderBottom: `1px solid rgba(255,255,255,0.08)`,
+                      }}
                     >
-                      <span>Open App</span>
-                      <span className="arrow-glyph">→</span>
-                    </button>
+                      <div className="custom-banner-icon">
+                        <SparkleIcon size={24} color={color || '#60a5fa'} />
+                      </div>
+                      <span className="custom-banner-tag">{app.category || 'AI Application'}</span>
+                    </div>
+                  )}
+
+                  {/* Content & Metadata */}
+                  <div className="app-card-details">
+                    <div className="app-card-header-row">
+                      <h3 className="app-title-text">{title}</h3>
+                      <button
+                        type="button"
+                        className="btn-card-del"
+                        onClick={(e) => handleDeleteApp(e, id)}
+                        title="Delete application"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                    <p className="app-description-text">{description}</p>
+                    <div className="app-action-row">
+                      <button
+                        type="button"
+                        className={`btn-open-app ${buttonClass}`}
+                        onClick={() => onOpenApp && onOpenApp(app)}
+                      >
+                        <span>Open &amp; Run App</span>
+                        <span className="arrow-glyph">→</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </section>
+              );
+            })}
+          </section>
+        )}
       </div>
     </div>
   );

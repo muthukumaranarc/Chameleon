@@ -1,0 +1,10 @@
+Frontend/
+Backend/Chameleon/target/
+**/.git
+**/.gitignore
+**/.idea
+**/*.iml
+.vscode/
+node_modules/
+dist/
+*.log

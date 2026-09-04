@@ -1,0 +1,27 @@
+# Maven & Build artifacts
+target/
+Backend/Chameleon/target/
+*.class
+
+# Node & Frontend
+node_modules/
+Frontend/chameleon/node_modules/
+dist/
+Frontend/chameleon/dist/
+
+# Local Environment Variables & Secrets
+.env
+.env.local
+*.env
+application-local.properties
+
+# IDE & Editor files
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/

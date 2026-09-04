@@ -17,7 +17,7 @@ import java.util.Base64;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/gemini")
+@RequestMapping({"/api/gemini", "/api"})
 @CrossOrigin(origins = "*")
 public class GeminiController {
 
@@ -97,12 +97,16 @@ public class GeminiController {
      * @param request JSON body with prompt, optional imageBase64, mimeType, and model
      * @return GeminiResponse with the single-file HTML code
      */
-    @PostMapping(value = {"/generate-json", "/generate-app-json"}, consumes = MediaType.APPLICATION_JSON_VALUE)
+    @PostMapping(value = {"/generate-json", "/generate-app-json", "/generate"}, consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<GeminiResponse> generateJson(@RequestBody GeminiJsonRequest request) {
         if (request == null || request.getPrompt() == null || request.getPrompt().trim().isEmpty()) {
             return ResponseEntity.badRequest().body(
                     GeminiResponse.error(request != null ? request.getModel() : null, null, "Prompt is required in JSON payload")
             );
+        }
+
+        if (request.getApiKey() != null && !request.getApiKey().trim().isEmpty()) {
+            geminiConfig.setCustomApiKey(request.getApiKey());
         }
 
         byte[] imageBytes = null;
@@ -133,7 +137,12 @@ public class GeminiController {
             }
         }
 
-        GeminiResponse response = geminiService.generate(request.getPrompt(), imageBytes, mimeType, request.getModel());
+        String prompt = request.getPrompt();
+        if (request.getCustomInstructions() != null && !request.getCustomInstructions().trim().isEmpty()) {
+            prompt = "[User Context & Preferences: " + request.getCustomInstructions().trim() + "]\n\n" + prompt;
+        }
+
+        GeminiResponse response = geminiService.generate(prompt, imageBytes, mimeType, request.getModel());
         return ResponseEntity.ok(response);
     }
 

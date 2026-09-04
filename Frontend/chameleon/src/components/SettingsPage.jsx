@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   SearchIcon,
   SparkleIcon,
@@ -20,63 +20,99 @@ import {
 import UserProfileMenu from './UserProfileMenu';
 import NotificationPopover from './NotificationPopover';
 import chameleonMascot from '../assets/chameleon-mascot.png';
-import { api, API_BASE_URL } from '../api';
+import { api, ENDPOINTS } from '../api';
 
 const MODELS = [
   {
-    id: 'gemini-2.5-pro',
-    name: 'Gemini 2.5 Pro',
-    type: 'pro',
-    iconType: 'sparkle',
-    iconColor: '#2563eb',
-    description: 'Best for complex reasoning, coding, and advanced tasks.',
+    id: 'gemini-3.1-flash-lite',
+    name: 'Gemini 3.1 Flash Lite',
+    type: 'lite',
+    iconType: 'lightning',
+    iconColor: '#0ea5e9',
+    description: 'Ultra-low latency, highly reliable model with sub-second response times. (Recommended)',
     recommended: true,
   },
   {
-    id: 'gemini-2.5-flash',
-    name: 'Gemini 2.5 Flash',
+    id: 'gemini-3.5-flash',
+    name: 'Gemini 3.5 Flash',
     type: 'flash',
     iconType: 'lightning',
-    iconColor: '#f59e0b',
-    description: 'Fast, efficient, and great for everyday use.',
+    iconColor: '#10b981',
+    description: 'Balanced speed and precision for rapid UI generation and prototypes.',
     recommended: false,
   },
   {
-    id: 'gemini-1.5-pro',
-    name: 'Gemini 1.5 Pro',
-    type: 'pro',
+    id: 'gemini-3.7-flash',
+    name: 'Gemini 3.7 Flash',
+    type: 'flash',
     iconType: 'sparkle',
     iconColor: '#8b5cf6',
-    description: 'Balanced performance for most tasks.',
+    description: 'High-speed Gemini 3 reasoning for interactive UI designs and complex web scripts.',
     recommended: false,
   },
   {
-    id: 'gemini-1.5-flash',
-    name: 'Gemini 1.5 Flash',
+    id: 'gemini-3.6-flash',
+    name: 'Gemini 3.6 Flash',
     type: 'flash',
     iconType: 'lightning',
     iconColor: '#f59e0b',
-    description: 'Lightweight and fastest for simple tasks.',
+    description: 'Stable Gemini 3 workhorse for standard web applications and widgets.',
+    recommended: false,
+  },
+  {
+    id: 'gemini-3.8-flash',
+    name: 'Gemini 3.8 Flash',
+    type: 'flash',
+    iconType: 'lightning',
+    iconColor: '#2563eb',
+    description: 'Next-gen flagship multimodal model. High-fidelity web application generation.',
     recommended: false,
   },
 ];
 
 const PRESETS = [
   { label: "I'm a student", text: "I am a student. Explain concepts step-by-step with intuitive analogies and clear summaries." },
-  { label: "I'm a developer", text: "I am a software engineer. Provide clean, modular, production-ready code with minimal boilerplate." },
-  { label: "I'm a researcher", text: "I am a researcher. Include citations, rigorous technical detail, and evidence-backed reasoning." },
-  { label: "Keep it concise", text: "Be direct, concise, and prioritize key insights with bullet points." },
+  { label: "I'm a developer", text: "I am a software engineer. Provide clean, modular, production-ready single-file apps with modern CSS." },
+  { label: "I'm a researcher", text: "I am a researcher. Include clear metric calculations, data tables, and evidence-backed structure." },
+  { label: "Keep it concise", text: "Design sleek, minimal, high-utility tools with focus on responsive interactions." },
 ];
 
 export const SettingsPage = ({ onNavigate, onLogout, user }) => {
   const [activeSubTab, setActiveSubTab] = useState('ai-model');
-  const [selectedModel, setSelectedModel] = useState('gemini-2.5-pro');
+  const [selectedModel, setSelectedModel] = useState('gemini-3.8-flash');
+  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [apiKeyStatus, setApiKeyStatus] = useState({ tested: false, valid: false, message: '' });
   const [customInstructions, setCustomInstructions] = useState('');
   const [responseStyle, setResponseStyle] = useState('Balanced');
   const [tone, setTone] = useState('Friendly');
   const [responseLength, setResponseLength] = useState('Medium');
   const [isSaving, setIsSaving] = useState(false);
   const [saveToast, setSaveToast] = useState(null);
+
+  // Load existing settings from backend on mount
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const data = await api.get(ENDPOINTS.SETTINGS.BASE);
+        if (data) {
+          if (data.model) setSelectedModel(data.model);
+          if (data.customInstructions) setCustomInstructions(data.customInstructions);
+          if (data.preferences) {
+            if (data.preferences.responseStyle) setResponseStyle(data.preferences.responseStyle);
+            if (data.preferences.tone) setTone(data.preferences.tone);
+            if (data.preferences.responseLength) setResponseLength(data.preferences.responseLength);
+          }
+          if (data.apiKeyConfigured) {
+            setApiKeyStatus({ tested: true, valid: true, message: 'Gemini API Key is active on server' });
+          }
+        }
+      } catch (err) {
+        console.warn('[Settings] Loaded with defaults:', err);
+      }
+    };
+    loadSettings();
+  }, []);
 
   // Quick preset button handler
   const handleApplyPreset = (presetText) => {
@@ -87,13 +123,30 @@ export const SettingsPage = ({ onNavigate, onLogout, user }) => {
 
   // Reset to default settings
   const handleResetToDefault = () => {
-    setSelectedModel('gemini-2.5-pro');
+    setSelectedModel('gemini-3.8-flash');
     setCustomInstructions('');
     setResponseStyle('Balanced');
     setTone('Friendly');
     setResponseLength('Medium');
     setSaveToast({ type: 'info', message: 'Settings restored to defaults.' });
     setTimeout(() => setSaveToast(null), 3500);
+  };
+
+  // Test API Key
+  const handleTestApiKey = async () => {
+    setApiKeyStatus({ tested: true, valid: false, message: 'Testing key with Google Generative Language API...' });
+    try {
+      const res = await api.post(ENDPOINTS.SETTINGS.TEST_KEY, {
+        apiKey: apiKeyInput ? apiKeyInput.trim() : undefined,
+      });
+      if (res?.valid) {
+        setApiKeyStatus({ tested: true, valid: true, message: '✓ Key Verified: Connected to Gemini API successfully!' });
+      } else {
+        setApiKeyStatus({ tested: true, valid: false, message: `✕ Key Test Failed: ${res?.message || 'Invalid key'}` });
+      }
+    } catch (err) {
+      setApiKeyStatus({ tested: true, valid: false, message: `✕ Connection error: ${err.message}` });
+    }
   };
 
   // Save changes handler connected to API
@@ -107,19 +160,17 @@ export const SettingsPage = ({ onNavigate, onLogout, user }) => {
         tone,
         responseLength,
       },
+      apiKey: apiKeyInput ? apiKeyInput.trim() : undefined,
       updatedAt: new Date().toISOString(),
     };
 
     try {
-      // Connect to centralized backend URL
-      await api.post('/api/settings', settingsPayload);
-      setSaveToast({ type: 'success', message: 'Settings saved successfully!' });
+      await api.post(ENDPOINTS.SETTINGS.BASE, settingsPayload);
+      localStorage.setItem('chameleon_selected_model', selectedModel);
+      setSaveToast({ type: 'success', message: 'Settings & Gemini configuration saved successfully!' });
     } catch (err) {
-      console.info(
-        `[Chameleon Settings] Backend at ${API_BASE_URL} saved locally:`,
-        err.message || err
-      );
-      // Friendly local confirmation
+      console.warn('[Chameleon Settings] Saved locally:', err);
+      localStorage.setItem('chameleon_selected_model', selectedModel);
       setSaveToast({ type: 'success', message: 'Settings updated successfully!' });
     } finally {
       setIsSaving(false);
@@ -136,7 +187,7 @@ export const SettingsPage = ({ onNavigate, onLogout, user }) => {
           <input
             type="text"
             className="apps-search-input"
-            placeholder="Search anything..."
+            placeholder="Search settings..."
           />
         </div>
 
@@ -171,16 +222,16 @@ export const SettingsPage = ({ onNavigate, onLogout, user }) => {
         {/* Page Title & Mascot Banner */}
         <div className="settings-hero-row">
           <div className="settings-title-col">
-            <h1 className="settings-main-title">Settings</h1>
+            <h1 className="settings-main-title">Workspace Settings</h1>
             <p className="settings-sub-title">
-              Customize Chameleon to make it work the way you do.
+              Configure your Gemini 3 AI models, API keys, and app generation instructions.
             </p>
           </div>
 
           <div className="settings-mascot-unit">
             <div className="settings-speech-bubble">
-              <p className="settings-bubble-line1">Tailor your AI.</p>
-              <p className="settings-bubble-line2">A more you, in every reply.</p>
+              <p className="settings-bubble-line1">Gemini 3 Powered.</p>
+              <p className="settings-bubble-line2">Tailored to your ideas.</p>
               <div className="settings-bubble-tail" />
             </div>
 
@@ -202,7 +253,7 @@ export const SettingsPage = ({ onNavigate, onLogout, user }) => {
             onClick={() => setActiveSubTab('ai-model')}
           >
             <SparkleIcon size={15} color={activeSubTab === 'ai-model' ? '#2563eb' : '#64748b'} />
-            <span>AI & Model</span>
+            <span>AI &amp; Gemini Models</span>
           </button>
 
           <button
@@ -220,7 +271,7 @@ export const SettingsPage = ({ onNavigate, onLogout, user }) => {
             onClick={() => setActiveSubTab('account')}
           >
             <ShieldIcon size={16} color={activeSubTab === 'account' ? '#2563eb' : '#64748b'} />
-            <span>Account</span>
+            <span>API Key &amp; Account</span>
           </button>
 
           <button
@@ -242,6 +293,74 @@ export const SettingsPage = ({ onNavigate, onLogout, user }) => {
           </button>
         </div>
 
+        {/* Section 0: Gemini API Key Card */}
+        <div className="settings-section-card">
+          <div className="section-card-header">
+            <div className="section-icon-badge badge-blue">
+              <ShieldIcon size={20} color="#2563eb" />
+            </div>
+            <div className="section-title-wrapper">
+              <h2 className="section-title">Gemini API Key</h2>
+              <p className="section-subtitle">
+                Configure your Google Gemini API Key for real-time model synthesis.
+              </p>
+            </div>
+            <a
+              href="https://aistudio.google.com/app/apikey"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="section-header-link"
+            >
+              <span>Get API Key</span>
+              <ExternalLinkIcon size={13} color="#2563eb" />
+            </a>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <input
+                type={showApiKey ? 'text' : 'password'}
+                className="custom-instructions-textarea"
+                style={{ padding: '12px 16px', height: '46px', flex: 1 }}
+                placeholder="Enter custom Gemini API Key (or leave blank to use configured key)"
+                value={apiKeyInput}
+                onChange={(e) => setApiKeyInput(e.target.value)}
+              />
+              <button
+                type="button"
+                className="btn-secondary"
+                style={{ height: '46px', padding: '0 16px' }}
+                onClick={() => setShowApiKey(!showApiKey)}
+              >
+                {showApiKey ? 'Hide' : 'Show'}
+              </button>
+              <button
+                type="button"
+                className="btn-save-changes"
+                style={{ height: '46px', whiteSpace: 'nowrap' }}
+                onClick={handleTestApiKey}
+              >
+                Test Connection
+              </button>
+            </div>
+
+            {apiKeyStatus.tested && (
+              <div
+                style={{
+                  fontSize: '0.85rem',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  background: apiKeyStatus.valid ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                  color: apiKeyStatus.valid ? '#10b981' : '#ef4444',
+                  border: `1px solid ${apiKeyStatus.valid ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                }}
+              >
+                {apiKeyStatus.message}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Section 1: AI Model */}
         <div className="settings-section-card">
           <div className="section-card-header">
@@ -249,9 +368,9 @@ export const SettingsPage = ({ onNavigate, onLogout, user }) => {
               <BrainIcon size={20} color="#2563eb" />
             </div>
             <div className="section-title-wrapper">
-              <h2 className="section-title">AI Model</h2>
+              <h2 className="section-title">Gemini 3 Model Selection</h2>
               <p className="section-subtitle">
-                Choose the Gemini model that powers your workspace.
+                Choose the Gemini model that powers your workspace application generator.
               </p>
             </div>
             <a
@@ -260,7 +379,7 @@ export const SettingsPage = ({ onNavigate, onLogout, user }) => {
               rel="noopener noreferrer"
               className="section-header-link"
             >
-              <span>Learn more</span>
+              <span>Model Specs</span>
               <ExternalLinkIcon size={13} color="#2563eb" />
             </a>
           </div>
@@ -311,9 +430,7 @@ export const SettingsPage = ({ onNavigate, onLogout, user }) => {
             <div className="section-title-wrapper">
               <h2 className="section-title">Custom Instructions</h2>
               <p className="section-subtitle">
-                Give Chameleon additional context about you. This helps Gemini
-                understand your preferences and provide more personalized
-                responses.
+                Provide custom design requirements, tech preferences, or workspace guidelines to Gemini.
               </p>
             </div>
             <button
@@ -321,7 +438,7 @@ export const SettingsPage = ({ onNavigate, onLogout, user }) => {
               className="section-header-link btn-tips"
               onClick={() =>
                 handleApplyPreset(
-                  'Call me Muthu. Be concise, insightful, and highlight key action items.'
+                  'Always use dark theme with neon cyan accents, modular JavaScript, and local state persistence.'
                 )
               }
             >
@@ -335,7 +452,7 @@ export const SettingsPage = ({ onNavigate, onLogout, user }) => {
               className="custom-instructions-textarea"
               rows={4}
               maxLength={1000}
-              placeholder="E.g. I am a college student studying computer science. I prefer short and clear explanations.&#10;I like examples and real-world use cases. Call me Muthu."
+              placeholder="E.g. I prefer modern minimalist dashboards with responsive flexbox layouts, smooth hover animations, and persistent localStorage state."
               value={customInstructions}
               onChange={(e) => setCustomInstructions(e.target.value)}
             />
@@ -350,7 +467,7 @@ export const SettingsPage = ({ onNavigate, onLogout, user }) => {
               className="preset-chip-add"
               onClick={() =>
                 handleApplyPreset(
-                  'I prefer clean code examples with explanations and practical use cases.'
+                  'Include clear responsive styles, accessible form elements, and exportable data features.'
                 )
               }
             >
@@ -377,9 +494,9 @@ export const SettingsPage = ({ onNavigate, onLogout, user }) => {
               <SlidersIcon size={20} color="#2563eb" />
             </div>
             <div className="section-title-wrapper">
-              <h2 className="section-title">Conversation Preferences</h2>
+              <h2 className="section-title">Application Styling Preferences</h2>
               <p className="section-subtitle">
-                Fine-tune how Chameleon responds to you.
+                Fine-tune the design aesthetic and complexity of generated apps.
               </p>
             </div>
           </div>
@@ -388,7 +505,7 @@ export const SettingsPage = ({ onNavigate, onLogout, user }) => {
             {/* Row 1: Response Style */}
             <div className="pref-row">
               <div className="pref-label-col">
-                <span className="pref-label-text">Response Style</span>
+                <span className="pref-label-text">Layout Complexity</span>
                 <span className="pref-info-icon" title="Adjust the analytical depth of replies">
                   <InfoIcon size={13} color="#94a3b8" />
                 </span>
@@ -401,23 +518,23 @@ export const SettingsPage = ({ onNavigate, onLogout, user }) => {
                     onChange={(e) => setResponseStyle(e.target.value)}
                   >
                     <option value="Balanced">Balanced</option>
-                    <option value="Precise">Precise</option>
-                    <option value="Creative">Creative</option>
-                    <option value="Explanatory">Explanatory</option>
+                    <option value="Minimalist">Minimalist</option>
+                    <option value="Feature-Rich">Feature-Rich</option>
+                    <option value="Dashboard">Dashboard</option>
                   </select>
                   <ChevronDownIcon size={12} color="#64748b" className="select-chevron" />
                 </div>
               </div>
               <div className="pref-desc-col">
-                Neither too short nor too detailed.
+                Balanced components and modern responsive spacing.
               </div>
             </div>
 
             {/* Row 2: Tone */}
             <div className="pref-row">
               <div className="pref-label-col">
-                <span className="pref-label-text">Tone</span>
-                <span className="pref-info-icon" title="Sets the conversational warmth of the assistant">
+                <span className="pref-label-text">Color Theme Preference</span>
+                <span className="pref-info-icon" title="Sets default color theme for generated apps">
                   <InfoIcon size={13} color="#94a3b8" />
                 </span>
               </div>
@@ -428,24 +545,24 @@ export const SettingsPage = ({ onNavigate, onLogout, user }) => {
                     value={tone}
                     onChange={(e) => setTone(e.target.value)}
                   >
-                    <option value="Friendly">Friendly</option>
-                    <option value="Professional">Professional</option>
-                    <option value="Casual">Casual</option>
-                    <option value="Direct">Direct</option>
+                    <option value="Dark Modern">Dark Modern</option>
+                    <option value="Clean Light">Clean Light</option>
+                    <option value="Vibrant Violet">Vibrant Violet</option>
+                    <option value="Emerald Minimal">Emerald Minimal</option>
                   </select>
                   <ChevronDownIcon size={12} color="#64748b" className="select-chevron" />
                 </div>
               </div>
               <div className="pref-desc-col">
-                Warm and approachable.
+                Elegant dark theme with glowing accents.
               </div>
             </div>
 
             {/* Row 3: Response Length */}
             <div className="pref-row">
               <div className="pref-label-col">
-                <span className="pref-label-text">Response Length</span>
-                <span className="pref-info-icon" title="Controls default length of generated responses">
+                <span className="pref-label-text">Script Interactivity</span>
+                <span className="pref-info-icon" title="Controls amount of interactive JavaScript generated">
                   <InfoIcon size={13} color="#94a3b8" />
                 </span>
               </div>
@@ -456,16 +573,15 @@ export const SettingsPage = ({ onNavigate, onLogout, user }) => {
                     value={responseLength}
                     onChange={(e) => setResponseLength(e.target.value)}
                   >
-                    <option value="Short">Short</option>
-                    <option value="Medium">Medium</option>
-                    <option value="Detailed">Detailed</option>
-                    <option value="Comprehensive">Comprehensive</option>
+                    <option value="Interactive">Fully Interactive (LocalStorage, CRUD, Events)</option>
+                    <option value="Medium">Standard Interactive</option>
+                    <option value="Light">Lightweight UI</option>
                   </select>
                   <ChevronDownIcon size={12} color="#64748b" className="select-chevron" />
                 </div>
               </div>
               <div className="pref-desc-col">
-                A balanced level of detail.
+                Includes state persistence and action handlers.
               </div>
             </div>
           </div>
@@ -480,7 +596,7 @@ export const SettingsPage = ({ onNavigate, onLogout, user }) => {
             </div>
             <div>
               <div className="reset-title">Reset Settings</div>
-              <div className="reset-subtitle">Restore all settings to default.</div>
+              <div className="reset-subtitle">Restore all configurations to default.</div>
             </div>
           </div>
 
@@ -506,7 +622,7 @@ export const SettingsPage = ({ onNavigate, onLogout, user }) => {
               ) : (
                 <CheckIcon size={16} color="#ffffff" />
               )}
-              <span>{isSaving ? 'Saving...' : 'Save Changes'}</span>
+              <span>{isSaving ? 'Saving...' : 'Save Settings'}</span>
             </button>
           </div>
         </div>

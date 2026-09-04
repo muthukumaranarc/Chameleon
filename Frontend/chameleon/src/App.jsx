@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import HeroSection from './components/HeroSection';
 import PromptInput from './components/PromptInput';
@@ -10,7 +10,7 @@ import SettingsPage from './components/SettingsPage';
 import AuthPage from './components/AuthPage';
 import GenerationModal from './components/GenerationModal';
 import muthuAvatar from './assets/muthu-avatar.png';
-import { api, API_BASE_URL } from './api';
+import { api, ENDPOINTS } from './api';
 import './App.css';
 
 const DEFAULT_USER = {
@@ -20,11 +20,8 @@ const DEFAULT_USER = {
 };
 
 function App() {
-  // Read auth state from localStorage (defaults to true for existing active sessions)
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    const saved = localStorage.getItem('chameleon_auth');
-    return saved !== null ? saved === 'true' : true;
-  });
+  // Authentication disabled by default as requested (no forced blocking)
+  const [isAuthenticated, setIsAuthenticated] = useState(true);
 
   const [currentUser, setCurrentUser] = useState(() => {
     try {
@@ -35,13 +32,17 @@ function App() {
     }
   });
 
-  // Track if user just performed a logout action
   const [justLoggedOut, setJustLoggedOut] = useState(false);
+  const [activeTab, setActiveTab] = useState('home');
 
-  // Active view tab: 'home' | 'apps' | 'settings' | 'auth'
-  const [activeTab, setActiveTab] = useState(() => {
-    const savedAuth = localStorage.getItem('chameleon_auth');
-    return savedAuth === 'false' ? 'auth' : 'home';
+  // Selected Gemini 3 Model - Default to high-speed & reliable gemini-3.1-flash-lite
+  const [selectedModel, setSelectedModel] = useState(() => {
+    const saved = localStorage.getItem('chameleon_selected_model');
+    if (!saved || saved === 'gemini-3.8-flash' || saved.includes('2.5')) {
+      localStorage.setItem('chameleon_selected_model', 'gemini-3.1-flash-lite');
+      return 'gemini-3.1-flash-lite';
+    }
+    return saved;
   });
 
   const [promptText, setPromptText] = useState('');
@@ -51,30 +52,28 @@ function App() {
   const [modalResult, setModalResult] = useState(null);
   const [modalError, setModalError] = useState('');
 
-  // Handle Logout - full flow: API call, clear stored session, redirect to Auth page
+  // Handle model change and persist
+  const handleModelChange = (model) => {
+    setSelectedModel(model);
+    localStorage.setItem('chameleon_selected_model', model);
+  };
+
+  // Handle Logout (Auth view preserved without deleting files)
   const handleLogout = async () => {
     try {
-      // Notify backend auth service
-      await api.post('/api/auth/logout', {
+      await api.post(ENDPOINTS.AUTH.LOGOUT, {
         user: currentUser?.name || 'Muthu',
         timestamp: new Date().toISOString(),
       });
     } catch (err) {
-      console.info(`[Chameleon Auth] Handled local logout for ${API_BASE_URL}:`, err.message || err);
+      console.info('[Chameleon Auth] Handled logout:', err.message || err);
     }
 
-    // Clear authentication state and tokens
-    localStorage.setItem('chameleon_auth', 'false');
-    localStorage.removeItem('chameleon_user');
-    sessionStorage.clear();
-
-    setIsAuthenticated(false);
-    setCurrentUser(null);
     setJustLoggedOut(true);
     setActiveTab('auth');
   };
 
-  // Handle Login Success - full flow: save user data, update auth state, return to workspace
+  // Handle Login Success
   const handleLoginSuccess = (userData) => {
     const userObj = {
       name: userData?.name || 'Muthu',
@@ -82,26 +81,20 @@ function App() {
       avatar: userData?.avatar || muthuAvatar,
     };
 
-    localStorage.setItem('chameleon_auth', 'true');
     localStorage.setItem('chameleon_user', JSON.stringify(userObj));
-
     setIsAuthenticated(true);
     setCurrentUser(userObj);
     setJustLoggedOut(false);
     setActiveTab('home');
   };
 
-  // Safe tab navigation that checks authentication status for protected routes
+  // Tab navigation
   const handleNavigate = (tab) => {
-    if (!isAuthenticated && (tab === 'apps' || tab === 'settings')) {
-      setActiveTab('auth');
-      return;
-    }
     setActiveTab(tab);
   };
 
-  // Handle prompt creation
-  const handleCreateApp = async (prompt) => {
+  // Handle prompt creation with optional multimodal image upload
+  const handleCreateApp = async (prompt, attachedImage = null) => {
     if (!prompt || !prompt.trim()) return;
 
     setPromptText(prompt);
@@ -112,29 +105,46 @@ function App() {
     setModalResult(null);
 
     try {
-      // Connect to centralized backend API using the configured backend URL
-      const response = await api.post('/api/generate', {
+      // Connect to Gemini 3 endpoint on backend
+      const payload = {
         prompt: prompt.trim(),
-        user: currentUser?.name || 'Muthu',
-        timestamp: new Date().toISOString(),
-      });
+        model: selectedModel,
+        imageBase64: attachedImage?.base64,
+        mimeType: attachedImage?.mimeType,
+      };
 
-      setModalStatus('success');
-      setModalResult(response);
+      const response = await api.post(ENDPOINTS.GEMINI.GENERATE, payload);
+
+      if (response && response.success) {
+        setModalStatus('success');
+        setModalResult(response);
+
+        // Automatically save newly generated app to backend storage
+        if (response.htmlCode) {
+          try {
+            const appTitle = prompt.length > 32 ? prompt.slice(0, 30) + '...' : prompt;
+            await api.post(ENDPOINTS.APPS.BASE, {
+              title: appTitle,
+              description: `Generated with ${selectedModel} from prompt: "${prompt}"`,
+              category: 'Custom AI App',
+              color: '#2563eb',
+              htmlCode: response.htmlCode,
+            });
+          } catch (saveErr) {
+            console.warn('Could not auto-save app to backend:', saveErr);
+          }
+        }
+      } else {
+        setModalStatus('error');
+        setModalError(response?.error || 'Failed to generate app code.');
+      }
     } catch (err) {
-      console.info(
-        `[Chameleon] Backend call to ${API_BASE_URL} responded:`,
-        err.message || err
-      );
-
-      // Provide clean feedback for both live backend and offline fallback
+      console.error('[Chameleon] Generation error:', err);
       setModalStatus('error');
       setModalError(
-        `Sent request to backend at "${API_BASE_URL}". ${
-          err.message.includes('Failed to fetch') || err.message.includes('NetworkError')
-            ? 'Backend is currently starting up or waiting for connection. The request parameters are captured.'
-            : err.message
-        }`
+        err.message?.includes('Failed to fetch')
+          ? 'Could not connect to Chameleon backend at port 8080. Please ensure the Spring Boot server is running.'
+          : err.message || 'Error occurred while communicating with Gemini.'
       );
     } finally {
       setIsLoading(false);
@@ -147,23 +157,68 @@ function App() {
     handleCreateApp(detailedPrompt || title);
   };
 
-  // Handle clicking Open App from the My Apps page
-  const handleOpenApp = (app) => {
+  const handleSaveApp = async (appData) => {
+    try {
+      await api.post(ENDPOINTS.APPS.BASE, appData);
+    } catch (err) {
+      console.warn('Could not save app to backend:', err);
+    }
+  };
+
+  // Handle clicking Open App from the My Apps page - immediately launches live app preview
+  const handleOpenApp = async (app) => {
     setPromptText(app.title);
-    handleCreateApp(`Open application: ${app.title} - ${app.description}`);
+
+    // If app already contains working htmlCode, launch directly
+    if (app.htmlCode) {
+      setModalResult({
+        htmlCode: app.htmlCode,
+        prompt: app.title,
+        model: selectedModel,
+        success: true,
+      });
+      setModalStatus('success');
+      setModalOpen(true);
+      return;
+    }
+
+    // Otherwise fetch the app code from backend
+    try {
+      setIsLoading(true);
+      setModalOpen(true);
+      setModalStatus('loading');
+      const data = await api.get(`${ENDPOINTS.APPS.BASE}/${app.id}`);
+      if (data && data.htmlCode) {
+        setModalResult({
+          htmlCode: data.htmlCode,
+          prompt: data.title,
+          model: selectedModel,
+          success: true,
+        });
+        setModalStatus('success');
+      } else {
+        // Fallback to generating
+        handleCreateApp(`Build application: ${app.title} - ${app.description}`);
+      }
+    } catch (err) {
+      console.warn('Error fetching app by id, regenerating:', err);
+      handleCreateApp(`Build application: ${app.title} - ${app.description}`);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <>
       {activeTab === 'auth' ? (
-        /* Dedicated Authentication Page matching the Auth template */
+        /* Dedicated Authentication Page preserved without deletion */
         <AuthPage
           onBackToHome={() => setActiveTab('home')}
           onLoginSuccess={handleLoginSuccess}
           justLoggedOut={justLoggedOut}
         />
       ) : activeTab === 'settings' ? (
-        /* Settings Layout with Sidebar matching the Settings template */
+        /* Settings Layout with Sidebar */
         <div className="apps-layout-container">
           <Sidebar
             activeTab={activeTab}
@@ -177,7 +232,7 @@ function App() {
           />
         </div>
       ) : activeTab === 'apps' ? (
-        /* My Apps Layout with Left Sidebar matching the template */
+        /* My Apps Layout with Left Sidebar */
         <div className="apps-layout-container">
           <Sidebar
             activeTab={activeTab}
@@ -193,9 +248,8 @@ function App() {
           />
         </div>
       ) : (
-        /* Home Page Layout matching the Home template */
+        /* Home Page Layout */
         <div className="app-container">
-          {/* Decorative ambient dot on top-left */}
           <div className="bg-ambient-dot" aria-hidden="true" />
 
           {/* Top Navigation */}
@@ -209,27 +263,27 @@ function App() {
 
           {/* Main Content Body */}
           <main className="main-wrapper">
-            {/* Hero Section with Greeting, Headline & Mascot */}
             <HeroSection />
 
-            {/* Prompt Search Input Pill */}
+            {/* Prompt Search Input Pill with Gemini 3 Models & Image Attachment */}
             <PromptInput
               value={promptText}
               onChange={setPromptText}
               onSubmit={handleCreateApp}
               isLoading={isLoading}
+              selectedModel={selectedModel}
+              onModelChange={handleModelChange}
             />
 
-            {/* 3x2 Grid Quick Suggestions */}
+            {/* Quick Suggestions */}
             <SuggestionCards onSelectSuggestion={handleSelectSuggestion} />
           </main>
 
-          {/* Bottom Footer */}
           <Footer />
         </div>
       )}
 
-      {/* Interactive Generation Modal */}
+      {/* Interactive Generation Modal / Live App Studio */}
       <GenerationModal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
@@ -237,10 +291,10 @@ function App() {
         status={modalStatus}
         result={modalResult}
         error={modalError}
+        onSaveApp={handleSaveApp}
       />
     </>
   );
 }
 
 export default App;
-
